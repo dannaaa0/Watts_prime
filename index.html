@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#172943">
+    <meta name="description" content="A bright, fast-paced prime number puzzle. Find the primes, beat the clock, and crack the hidden number.">
+    <title>Watt's the PrlmE? — Prime Time!</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="prime.js" defer></script>
+  </head>
+  <body>
+    <div class="circuit circuit-one" aria-hidden="true"></div>
+    <div class="circuit circuit-two" aria-hidden="true"></div>
+
+    <header class="topbar">
+      <a class="brand" href="#" aria-label="Watt's the PrlmE home">
+        <span class="brand-bolt" aria-hidden="true">⚡</span>
+        <span>Watt's the <span class="brand-pink">PrlmE?</span></span>
+      </a>
+      <nav class="top-actions" aria-label="Game tools">
+        <button class="icon-button" id="stats-open" type="button" aria-haspopup="dialog">
+          <span aria-hidden="true">▤</span> Stats
+        </button>
+        <button class="icon-button" id="achievements-open" type="button" aria-haspopup="dialog">
+          <span aria-hidden="true">✦</span> Badges
+        </button>
+      </nav>
+    </header>
+
+    <main class="app-shell">
+      <section class="intro-row" aria-label="Game introduction">
+        <div>
+          <p class="eyebrow"><span class="pulse-dot"></span> PRIME TIME, PLAYER!</p>
+          <h1>Watt's the <span>PrlmE?</span></h1>
+          <p class="intro-copy">Power up your brain. Spot the primes. Crack the mystery tile!</p>
+        </div>
+        <div class="robot" aria-label="A friendly robot mascot" role="img">
+          <span class="robot-antenna"></span>
+          <span class="robot-ear robot-ear-left"></span>
+          <span class="robot-ear robot-ear-right"></span>
+          <span class="robot-face"><i></i><i></i><b></b></span>
+          <span class="robot-neck"></span>
+          <span class="robot-body"><b>+</b></span>
+        </div>
+      </section>
+
+      <section class="game-layout" id="game-layout" aria-label="Prime number game" hidden>
+        <aside class="score-panel" aria-label="Game scoreboard">
+          <div class="score-card score-main">
+            <span class="card-label">YOUR SCORE</span>
+            <strong id="score-value">0</strong>
+            <span class="score-sub" id="combo-label">Ready to roll!</span>
+          </div>
+          <div class="score-card compact-card">
+            <div class="card-heading"><span class="card-label">LIVES</span><span id="lives-count">5 / 5</span></div>
+            <div id="lives-display" class="hearts" role="img" aria-label="5 lives remaining"></div>
+          </div>
+          <div class="score-card compact-card">
+            <div class="card-heading"><span class="card-label">TIME</span><span class="timer-icon" aria-hidden="true">◷</span></div>
+            <strong class="metric-value" id="timer-value">01:00</strong>
+            <div class="timer-track" aria-hidden="true"><span id="timer-bar"></span></div>
+          </div>
+          <div class="score-card compact-card level-card">
+            <div class="card-heading"><span class="card-label">LEVEL</span><span class="level-spark" aria-hidden="true">✦</span></div>
+            <strong class="metric-value"><span id="level-value">1</span><small id="level-name">SPARK</small></strong>
+            <span class="level-note" id="level-note">Find every prime!</span>
+          </div>
+          <div class="score-card mini-stats">
+            <span><b id="found-count">0</b><small>PRIMES FOUND</small></span>
+            <span><b id="hint-count">3</b><small>HINTS LEFT</small></span>
+          </div>
+        </aside>
+
+        <section class="play-panel">
+          <div class="board-toolbar">
+            <div>
+              <span class="board-kicker">THE PRIME GRID</span>
+              <h2 id="board-heading">Ready when you are</h2>
+            </div>
+            <div class="mode-chip" id="mode-chip">CLASSIC · EASY</div>
+          </div>
+
+          <div class="progress-wrap">
+            <div class="progress-label"><span>GRID PROGRESS</span><span id="progress-value">0 / 0 primes</span></div>
+            <div class="progress-track" role="progressbar" id="progress-bar" aria-label="Grid progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+              <span id="progress-fill"></span>
+            </div>
+          </div>
+
+          <div class="board-frame">
+            <div id="game-board" class="game-board" role="group" aria-label="5 by 5 number grid">
+              <div class="board-placeholder">
+                <span aria-hidden="true">✦</span>
+                <b>Your grid is charging...</b>
+                <small>Choose your settings and hit start!</small>
+              </div>
+            </div>
+          </div>
+          <p class="board-message" id="game-message" aria-live="polite">A prime number is greater than 1 and divisible only by 1 and itself.</p>
+
+          <div class="game-controls">
+            <button class="button button-hint" id="hint-button" type="button" disabled><span aria-hidden="true">✧</span> Use a hint <small id="hint-button-count">(3)</small></button>
+            <div class="control-spacer"></div>
+            <button class="button button-quiet" id="new-game-button" type="button">New game</button>
+            <button class="button button-restart" id="restart-button" type="button" disabled><span aria-hidden="true">↻</span> Restart</button>
+          </div>
+          <p class="keyboard-note"><span aria-hidden="true">⌨</span> Tip: use Tab to move around the grid and Enter to select.</p>
+        </section>
+      </section>
+
+      <section class="start-card" id="start-card" aria-labelledby="start-heading">
+        <div class="start-copy">
+          <span class="start-icon" aria-hidden="true">⚡</span>
+          <div>
+            <p class="eyebrow">READY TO PLAY?</p>
+            <h2 id="start-heading">Let's make some prime moves.</h2>
+            <p>Find every green-worthy number before the clock runs out. The gold mystery tile is hiding a bonus prime!</p>
+          </div>
+        </div>
+        <div class="start-options">
+          <label>GAME MODE
+            <select id="mode-select">
+              <option value="classic">Classic · beat the clock</option>
+              <option value="endless">Endless · keep the streak</option>
+            </select>
+          </label>
+          <label>DIFFICULTY
+            <select id="difficulty-select">
+              <option value="easy">Easy · 50–250</option>
+              <option value="medium">Medium · 251–1,000</option>
+              <option value="hard">Hard · 1,001–9,999</option>
+            </select>
+          </label>
+          <button class="button button-start" id="start-button" type="button"><span>Start playing</span><b aria-hidden="true">→</b></button>
+        </div>
+      </section>
+
+      <footer class="footer-note">
+        <span>Made for curious minds <b aria-hidden="true">♡</b></span>
+        <span>Prime fact: 2 is the only even prime!</span>
+      </footer>
+    </main>
+
+    <dialog class="game-dialog" id="guess-dialog" aria-labelledby="guess-heading">
+      <form method="dialog" class="dialog-close-form"><button class="dialog-close" aria-label="Close dialog">×</button></form>
+      <div class="dialog-illustration gold" aria-hidden="true">?</div>
+      <p class="eyebrow">MYSTERY PRIME</p>
+      <h2 id="guess-heading">What's behind the gold tile?</h2>
+      <p class="dialog-copy">Enter your guess. A correct answer earns <strong>+10 points</strong>!</p>
+      <form id="guess-form">
+        <label class="sr-only" for="guess-input">Guess the hidden prime number</label>
+        <input id="guess-input" name="guess" type="number" inputmode="numeric" autocomplete="off" placeholder="Type your number..." required>
+        <p class="input-error" id="guess-error" aria-live="polite"></p>
+        <button class="button button-start dialog-submit" type="submit">Lock in my guess <b aria-hidden="true">→</b></button>
+      </form>
+      <p class="guess-range" id="guess-range"></p>
+    </dialog>
+
+    <dialog class="game-dialog wide-dialog" id="result-dialog" aria-labelledby="result-heading">
+      <form method="dialog" class="dialog-close-form"><button class="dialog-close" aria-label="Close dialog">×</button></form>
+      <div class="dialog-illustration" id="result-icon" aria-hidden="true">✦</div>
+      <p class="eyebrow" id="result-eyebrow">ROUND COMPLETE</p>
+      <h2 id="result-heading">Great work!</h2>
+      <p class="dialog-copy" id="result-copy"></p>
+      <div class="result-stats" id="result-stats"></div>
+      <div class="result-actions">
+        <button class="button button-quiet" id="result-new-game" type="button">New game</button>
+        <button class="button button-start" id="result-restart" type="button">Play again <b aria-hidden="true">→</b></button>
+      </div>
+    </dialog>
+
+    <dialog class="game-dialog wide-dialog" id="info-dialog" aria-labelledby="info-heading">
+      <form method="dialog" class="dialog-close-form"><button class="dialog-close" aria-label="Close dialog">×</button></form>
+      <p class="eyebrow" id="info-eyebrow">YOUR JOURNEY</p>
+      <h2 id="info-heading">Your stats</h2>
+      <div id="info-content" class="info-content"></div>
+      <form method="dialog" class="info-close-form"><button class="button button-start" type="submit">Back to game</button></form>
+    </dialog>
+
+    <div class="toast-region" id="toast-region" aria-live="polite" aria-atomic="true"></div>
+    <div class="confetti-layer" id="confetti-layer" aria-hidden="true"></div>
+  </body>
+</html>
