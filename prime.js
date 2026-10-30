@@ -796,7 +796,7 @@
     robotMouthTimer = window.setTimeout(() => {
       robot.classList.remove("is-mouth-changed");
       robotMouthTimer = null;
-    }, 10);
+    }, 1);
   }
 
   async function playRobotOuch() {
