@@ -35,14 +35,19 @@
           <h1>Watt's the <span>PrlmE?</span></h1>
           <p class="intro-copy">Power up your brain. Spot the primes. Crack the mystery tile!</p>
         </div>
-        <div class="robot" aria-label="A friendly robot mascot" role="img">
+        <div class="robot" role="group" aria-label="Friendly robot mascot">
           <span class="robot-antenna"></span>
           <span class="robot-ear robot-ear-left"></span>
           <span class="robot-ear robot-ear-right"></span>
-          <span class="robot-face"><i></i><i></i><b></b></span>
+          <button class="robot-face" id="robot-face" type="button" aria-label="Ask the robot for a prime number fun fact">
+            <i></i><i></i><b></b>
+          </button>
           <span class="robot-neck"></span>
-          <span class="robot-body"><b>+</b></span>
+          <button class="robot-body" id="robot-body" type="button" aria-label="Make the robot dodge">
+            <b aria-hidden="true">+</b>
+          </button>
         </div>
+        <div class="robot-fact-bubble" id="robot-fact-bubble" role="status" aria-live="polite" aria-atomic="true" hidden></div>
       </section>
 
       <section class="game-layout" id="game-layout" aria-label="Prime number game" hidden>
