@@ -118,6 +118,7 @@
   let robotReturnTimer = null;
   let robotCleanupTimer = null;
   let robotFactTimer = null;
+  let robotAudioContext = null;
   let lastPrimeFactIndex = -1;
   let renderedGrid = null;
 
@@ -681,6 +682,7 @@
   }
 
   function sharePrimeFact() {
+    playRobotDing().catch(error => console.warn("Could not play the robot sound.", error));
     holdRobotPosition();
     let factIndex = randomInteger(0, PRIME_FACTS.length - 1);
     if (factIndex === lastPrimeFactIndex) {
@@ -729,8 +731,8 @@
     robotFactTimer = window.setTimeout(() => {
       robotFactBubble.hidden = true;
       robotFactTimer = null;
-      scheduleRobotReturn(3000);
-    }, 5000);
+      scheduleRobotReturn(2000);
+    }, 8000);
   }
 
   function getRobotTranslate() {
@@ -766,7 +768,74 @@
     }, delay);
   }
 
+  async function playRobotOuch() {
+    const AudioContextConstructor = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextConstructor) return;
+    if (!robotAudioContext) robotAudioContext = new AudioContextConstructor();
+    if (robotAudioContext.state === "suspended") await robotAudioContext.resume();
+
+    const now = robotAudioContext.currentTime;
+    const duration = 0.15;
+    const cutoff = duration - 0.015;
+    const sound = robotAudioContext.createGain();
+    sound.gain.setValueAtTime(0.0001, now);
+    sound.gain.exponentialRampToValueAtTime(0.3, now + 0.035);
+    sound.gain.setTargetAtTime(0.17, now + 0.11, 0.07);
+    sound.gain.setValueAtTime(0.17, now + cutoff);
+    sound.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+    sound.connect(robotAudioContext.destination);
+
+    const voice = robotAudioContext.createOscillator();
+    voice.type = "sawtooth";
+    voice.frequency.setValueAtTime(680, now);
+    voice.frequency.exponentialRampToValueAtTime(980, now + 0.12);
+    voice.frequency.exponentialRampToValueAtTime(800, now + cutoff);
+
+    [[780, 430, 0.65], [1350, 2150, 0.3]].forEach(([start, end, volume]) => {
+      const formant = robotAudioContext.createBiquadFilter();
+      formant.type = "bandpass";
+      formant.frequency.setValueAtTime(start, now);
+      formant.frequency.exponentialRampToValueAtTime(end, now + duration);
+      formant.Q.value = 4;
+      const formantGain = robotAudioContext.createGain();
+      formantGain.gain.value = volume;
+      voice.connect(formant);
+      formant.connect(formantGain);
+      formantGain.connect(sound);
+    });
+    voice.start(now);
+    voice.stop(now + duration + 0.02);
+  }
+
+  async function playRobotDing() {
+    const AudioContextConstructor = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextConstructor) return;
+    if (!robotAudioContext) robotAudioContext = new AudioContextConstructor();
+    if (robotAudioContext.state === "suspended") await robotAudioContext.resume();
+
+    const now = robotAudioContext.currentTime;
+    const duration = 0.40;
+    const sound = robotAudioContext.createGain();
+    sound.gain.setValueAtTime(0.0001, now);
+    sound.gain.exponentialRampToValueAtTime(0.3, now + 0.008);
+    sound.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+    sound.connect(robotAudioContext.destination);
+
+    [880, 1760].forEach((frequency, index) => {
+      const voice = robotAudioContext.createOscillator();
+      const partial = robotAudioContext.createGain();
+      voice.type = "sine";
+      voice.frequency.setValueAtTime(frequency, now);
+      partial.gain.value = index === 0 ? 1 : 0.28;
+      voice.connect(partial);
+      partial.connect(sound);
+      voice.start(now);
+      voice.stop(now + duration + 0.02);
+    });
+  }
+
   function dodgeRobot() {
+    playRobotOuch().catch(error => console.warn("Could not play the robot sound.", error));
     window.clearTimeout(robotReturnTimer);
     window.clearTimeout(robotCleanupTimer);
     const [currentX, currentY] = getRobotTranslate();
