@@ -10,6 +10,23 @@
   };
   const MAX_LIFE_UNITS = 10;
   const HINTS_PER_GAME = 3;
+  const PRIME_FACTS = [
+    "2 is the only even prime. Every other even number can be divided by 2!",
+    "1 is not prime: a prime number must have exactly two positive divisors.",
+    "Every whole number greater than 1 can be built from primes, and that prime factorization is unique.",
+    "There are infinitely many primes. No matter how far you count, there is always another one!",
+    "Any number greater than 5 that ends in 5 is divisible by 5, so it cannot be prime.",
+    "Every prime greater than 3 is one more or one less than a multiple of 6.",
+    "But numbers next to multiples of 6 are not always prime: 25 is a sneaky example!",
+    "In base 10, every prime greater than 5 ends in 1, 3, 7, or 9.",
+    "11 is both a prime and a palindrome: it reads the same backward and forward.",
+    "101 is another palindromic prime. So is 131!",
+    "Some primes look like 2ⁿ − 1. These are called Mersenne primes, after mathematician Marin Mersenne.",
+    "Prime gaps can be surprisingly long: you can find stretches of consecutive numbers with no primes at all.",
+    "As numbers get larger, primes become less common. Near a large number n, their frequency is about 1 in ln(n).",
+    "Goldbach's conjecture says every even number greater than 2 is a sum of two primes—but it has not been proven yet!",
+    "The Sieve of Eratosthenes finds primes by crossing out multiples, starting with the smallest prime."
+  ];
   const DIFFICULTIES = {
     easy: { min: 50, max: 250, label: "EASY" },
     medium: { min: 251, max: 1000, label: "MEDIUM" },
@@ -95,6 +112,12 @@
     lastSettings: { mode: "classic", difficulty: "easy" },
     storage: loadStorage()
   };
+  const robot = document.querySelector(".robot");
+  const robotFactBubble = document.querySelector("#robot-fact-bubble");
+  let robotReturnTimer = null;
+  let robotCleanupTimer = null;
+  let robotFactTimer = null;
+  let lastPrimeFactIndex = -1;
   let renderedGrid = null;
 
   function defaultStorage() {
@@ -647,12 +670,131 @@
     showToast(`Badge unlocked: ${achievement.name} ${achievement.icon}`);
   }
 
-  function showToast(message) {
+  function showToast(message, duration = 3000) {
     const toast = document.createElement("div");
     toast.className = "toast";
     toast.textContent = message;
     elements.toastRegion.append(toast);
-    window.setTimeout(() => toast.remove(), 3000);
+    window.setTimeout(() => toast.remove(), duration);
+  }
+
+  function sharePrimeFact() {
+    holdRobotPosition();
+    let factIndex = randomInteger(0, PRIME_FACTS.length - 1);
+    if (factIndex === lastPrimeFactIndex) {
+      factIndex = (factIndex + 1) % PRIME_FACTS.length;
+    }
+    lastPrimeFactIndex = factIndex;
+    robotFactBubble.textContent = PRIME_FACTS[factIndex];
+    robotFactBubble.classList.remove("on-left", "above");
+    robotFactBubble.hidden = false;
+    const robotBounds = robot.getBoundingClientRect();
+    const gap = 12;
+    const maxWidth = Math.min(280, window.innerWidth - 16);
+    const leftSpace = robotBounds.left - gap - 8;
+    const rightSpace = window.innerWidth - robotBounds.right - gap - 8;
+    const putOnLeft = leftSpace >= rightSpace;
+    const sideSpace = putOnLeft ? leftSpace : rightSpace;
+    const bubbleOnSide = sideSpace >= 180;
+    robotFactBubble.style.width = `${bubbleOnSide ? Math.min(maxWidth, sideSpace) : maxWidth}px`;
+    robotFactBubble.classList.toggle("on-left", bubbleOnSide && putOnLeft);
+    robotFactBubble.classList.toggle("above", !bubbleOnSide);
+    const bubbleBounds = robotFactBubble.getBoundingClientRect();
+    const left = bubbleOnSide
+      ? putOnLeft
+        ? robotBounds.left - gap - bubbleBounds.width
+        : robotBounds.right + gap
+      : robotBounds.left + (robotBounds.width - bubbleBounds.width) / 2;
+    const top = bubbleOnSide
+      ? robotBounds.top - bubbleBounds.height + 28
+      : robotBounds.top - bubbleBounds.height - gap;
+    const safeLeft = Math.max(8, Math.min(window.innerWidth - bubbleBounds.width - 8, left));
+    const safeTop = Math.max(0, Math.min(window.innerHeight - bubbleBounds.height - 8, top));
+    robotFactBubble.style.left = `${safeLeft}px`;
+    robotFactBubble.style.top = `${safeTop}px`;
+    if (bubbleOnSide) {
+      robotFactBubble.style.setProperty(
+        "--bubble-tail-y",
+        `${Math.max(14, Math.min(bubbleBounds.height - 14, robotBounds.top + robotBounds.height / 2 - safeTop))}px`
+      );
+    } else {
+      robotFactBubble.style.setProperty(
+        "--bubble-tail-x",
+        `${Math.max(14, Math.min(bubbleBounds.width - 14, robotBounds.left + robotBounds.width / 2 - safeLeft))}px`
+      );
+    }
+    window.clearTimeout(robotFactTimer);
+    robotFactTimer = window.setTimeout(() => {
+      robotFactBubble.hidden = true;
+      robotFactTimer = null;
+      scheduleRobotReturn(3000);
+    }, 5000);
+  }
+
+  function getRobotTranslate() {
+    const translate = getComputedStyle(robot).translate;
+    if (translate === "none") return [0, 0];
+    const values = translate.split(/\s+/);
+    return [0, 1].map(index => Number.parseFloat(values[index]) || 0);
+  }
+
+  function holdRobotPosition() {
+    window.clearTimeout(robotReturnTimer);
+    window.clearTimeout(robotCleanupTimer);
+    if (!robot.classList.contains("is-dodging")) return;
+
+    const [x, y] = getRobotTranslate();
+    robot.style.setProperty("--dodge-x", `${x}px`);
+    robot.style.setProperty("--dodge-y", `${y}px`);
+  }
+
+  function scheduleRobotReturn(delay = 5000) {
+    window.clearTimeout(robotReturnTimer);
+    window.clearTimeout(robotCleanupTimer);
+    if (!robot.classList.contains("is-dodging")) return;
+    robotReturnTimer = window.setTimeout(() => {
+      robot.style.setProperty("--dodge-x", "0px");
+      robot.style.setProperty("--dodge-y", "0px");
+      robotCleanupTimer = window.setTimeout(() => {
+        robot.classList.remove("is-dodging");
+        robot.style.removeProperty("--dodge-x");
+        robot.style.removeProperty("--dodge-y");
+        robotCleanupTimer = null;
+      }, 700);
+    }, delay);
+  }
+
+  function dodgeRobot() {
+    window.clearTimeout(robotReturnTimer);
+    window.clearTimeout(robotCleanupTimer);
+    const [currentX, currentY] = getRobotTranslate();
+    robot.style.setProperty("--dodge-x", `${currentX}px`);
+    robot.style.setProperty("--dodge-y", `${currentY}px`);
+    robot.classList.add("is-dodging");
+    void robot.offsetWidth;
+    const bounds = robot.getBoundingClientRect();
+    const margin = 20;
+    const maxLeft = Math.max(margin, window.innerWidth - bounds.width - margin);
+    const maxTop = Math.max(margin, window.innerHeight - bounds.height - margin);
+    const minDistance = Math.min(window.innerWidth, window.innerHeight) * .25;
+    let destinationLeft = bounds.left;
+    let destinationTop = bounds.top;
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      destinationLeft = randomInteger(margin, Math.floor(maxLeft));
+      destinationTop = randomInteger(margin, Math.floor(maxTop));
+      if (Math.hypot(destinationLeft - bounds.left, destinationTop - bounds.top) >= minDistance) break;
+    }
+    window.clearTimeout(robotFactTimer);
+    robotFactBubble.hidden = true;
+    const transform = new DOMMatrixReadOnly(getComputedStyle(robot).transform);
+    const determinant = transform.a * transform.d - transform.b * transform.c;
+    const deltaX = destinationLeft - bounds.left;
+    const deltaY = destinationTop - bounds.top;
+    const translateX = (deltaX * transform.d - deltaY * transform.c) / determinant;
+    const translateY = (deltaY * transform.a - deltaX * transform.b) / determinant;
+    robot.style.setProperty("--dodge-x", `${currentX + translateX}px`);
+    robot.style.setProperty("--dodge-y", `${currentY + translateY}px`);
+    scheduleRobotReturn();
   }
 
   function celebrate() {
@@ -703,6 +845,8 @@
   }
 
   document.querySelector("#start-button").addEventListener("click", () => startGame());
+  document.querySelector("#robot-face").addEventListener("click", sharePrimeFact);
+  document.querySelector("#robot-body").addEventListener("click", dodgeRobot);
   document.querySelector("#restart-button").addEventListener("click", () => startGame(state.lastSettings.mode, state.lastSettings.difficulty));
   document.querySelector("#new-game-button").addEventListener("click", () => {
     stopTimer();
