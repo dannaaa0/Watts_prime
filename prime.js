@@ -46,6 +46,7 @@
     combo: document.querySelector("#combo-label"),
     livesCount: document.querySelector("#lives-count"),
     lives: document.querySelector("#lives-display"),
+    timerCard: document.querySelector("#timer-card"),
     timer: document.querySelector("#timer-value"),
     timerBar: document.querySelector("#timer-bar"),
     level: document.querySelector("#level-value"),
@@ -294,6 +295,7 @@
     elements.score.textContent = String(state.score);
     elements.combo.textContent = state.combo > 1 ? `${state.combo}× combo — keep it going!` : state.combo === 1 ? "Nice one! Keep the streak." : "Ready to roll!";
     renderLives();
+    elements.timerCard.hidden = state.mode === "endless";
     const remaining = state.mode === "classic" ? state.timerSeconds : state.elapsedSeconds;
     elements.timer.textContent = formatTime(remaining);
     const roundDuration = getRoundDuration(state.difficulty);
