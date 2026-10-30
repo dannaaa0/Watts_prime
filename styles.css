@@ -202,6 +202,7 @@ h1 span { color: var(--pink); }
 .tile.mystery-tile.answer-reveal { border-color: #f0c84f; box-shadow: 0 3px 0 #9c8754, 0 0 0 3px rgba(230, 189, 103, .32), inset 0 0 18px rgba(255, 211, 100, .2); font-family: "DM Mono", "Courier New", monospace; font-size: clamp(12px, 1.65vw, 18px); font-weight: 500; line-height: normal; }
 .tile.mystery-tile:hover:not(:disabled) { border-color: #e6b746; box-shadow: 0 6px 0 #e6d197, 0 0 18px rgba(246, 202, 92, .35); }
 .tile.mystery-tile.solved { color: #5d491e; background: #e6ce86; }
+.tile.mystery-tile.answer-reveal.solved { color: #15583f; border-color: #77c49f; background: #b8e3cc; box-shadow: 0 3px 0 #6b9b84; animation: none; }
 .tile.hint-highlight { border-color: #4a9bd7; box-shadow: 0 0 0 3px rgba(74, 155, 215, .28), 0 4px 0 #d6e5ef; animation: hint-pulse .75s ease-in-out infinite alternate; }
 .board-placeholder { grid-column: 1 / -1; min-height: 310px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: #bec7d0; text-align: center; }
 .board-placeholder span { color: #e6bd67; font-size: 35px; }
