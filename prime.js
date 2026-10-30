@@ -118,6 +118,11 @@
   let robotReturnTimer = null;
   let robotCleanupTimer = null;
   let robotFactTimer = null;
+  let robotArrivalTimer = null;
+  let robotEyesTimer = null;
+  let robotMouthTimer = null;
+  let robotDestinationReached = false;
+  let robotIsReturning = false;
   let robotAudioContext = null;
   let lastPrimeFactIndex = -1;
   let renderedGrid = null;
@@ -757,6 +762,16 @@
     window.clearTimeout(robotCleanupTimer);
     if (!robot.classList.contains("is-dodging")) return;
     robotReturnTimer = window.setTimeout(() => {
+      window.clearTimeout(robotArrivalTimer);
+      robotArrivalTimer = null;
+      robotDestinationReached = false;
+      window.clearTimeout(robotEyesTimer);
+      robotEyesTimer = null;
+      robot.classList.remove("is-eyes-closed");
+      window.clearTimeout(robotMouthTimer);
+      robotMouthTimer = null;
+      robot.classList.remove("is-mouth-changed");
+      robotIsReturning = true;
       robot.style.setProperty("--dodge-x", "0px");
       robot.style.setProperty("--dodge-y", "0px");
       robotCleanupTimer = window.setTimeout(() => {
@@ -766,6 +781,22 @@
         robotCleanupTimer = null;
       }, 700);
     }, delay);
+  }
+
+  function finishRobotArrival() {
+    window.clearTimeout(robotArrivalTimer);
+    robotArrivalTimer = null;
+    if (!robot.classList.contains("is-dodging") || robotIsReturning || robotDestinationReached) return;
+
+    robotDestinationReached = true;
+    robotEyesTimer = window.setTimeout(() => {
+      robot.classList.remove("is-eyes-closed");
+      robotEyesTimer = null;
+    }, 100);
+    robotMouthTimer = window.setTimeout(() => {
+      robot.classList.remove("is-mouth-changed");
+      robotMouthTimer = null;
+    }, 10);
   }
 
   async function playRobotOuch() {
@@ -836,6 +867,13 @@
 
   function dodgeRobot() {
     playRobotOuch().catch(error => console.warn("Could not play the robot sound.", error));
+    window.clearTimeout(robotArrivalTimer);
+    window.clearTimeout(robotEyesTimer);
+    window.clearTimeout(robotMouthTimer);
+    robotDestinationReached = false;
+    robotIsReturning = false;
+    robot.classList.add("is-eyes-closed");
+    robot.classList.add("is-mouth-changed");
     window.clearTimeout(robotReturnTimer);
     window.clearTimeout(robotCleanupTimer);
     const [currentX, currentY] = getRobotTranslate();
@@ -865,6 +903,7 @@
     const translateY = (deltaY * transform.a - deltaX * transform.b) / determinant;
     robot.style.setProperty("--dodge-x", `${currentX + translateX}px`);
     robot.style.setProperty("--dodge-y", `${currentY + translateY}px`);
+    robotArrivalTimer = window.setTimeout(finishRobotArrival, 700);
     scheduleRobotReturn();
   }
 
@@ -918,6 +957,11 @@
   document.querySelector("#start-button").addEventListener("click", () => startGame());
   document.querySelector("#robot-face").addEventListener("click", sharePrimeFact);
   document.querySelector("#robot-body").addEventListener("click", dodgeRobot);
+  robot.addEventListener("transitionend", event => {
+    if (event.target === robot && event.propertyName === "translate") {
+      finishRobotArrival();
+    }
+  });
   document.querySelector("#restart-button").addEventListener("click", () => startGame(state.lastSettings.mode, state.lastSettings.difficulty));
   document.querySelector("#new-game-button").addEventListener("click", () => {
     stopTimer();
