@@ -10,6 +10,8 @@
   };
   const MAX_LIFE_UNITS = 10;
   const HINTS_PER_GAME = 3;
+  const ROBOT_EYE_SPIN_DURATION = 1000;
+  const ROBOT_HEAD_SHAKE_DURATION = 1000;
   const PRIME_FACTS = [
     "2 is the only even prime. Every other even number can be divided by 2!",
     "1 is not prime: a prime number must have exactly two positive divisors.",
@@ -121,6 +123,11 @@
   let robotArrivalTimer = null;
   let robotEyesTimer = null;
   let robotMouthTimer = null;
+  let robotDizzyTimer = null;
+  let robotShakeTimer = null;
+  let robotClickSuppressionTimer = null;
+  let robotDrag = null;
+  let robotClickSuppressed = false;
   let robotDestinationReached = false;
   let robotIsReturning = false;
   let robotAudioContext = null;
@@ -688,7 +695,7 @@
 
   function sharePrimeFact() {
     playRobotDing().catch(error => console.warn("Could not play the robot sound.", error));
-    holdRobotPosition();
+    cancelRobotAnimations(true);
     let factIndex = randomInteger(0, PRIME_FACTS.length - 1);
     if (factIndex === lastPrimeFactIndex) {
       factIndex = (factIndex + 1) % PRIME_FACTS.length;
@@ -747,14 +754,32 @@
     return [0, 1].map(index => Number.parseFloat(values[index]) || 0);
   }
 
-  function holdRobotPosition() {
+  function cancelRobotAnimations(keepDodge = false) {
+    const [x, y] = getRobotTranslate();
     window.clearTimeout(robotReturnTimer);
     window.clearTimeout(robotCleanupTimer);
-    if (!robot.classList.contains("is-dodging")) return;
-
-    const [x, y] = getRobotTranslate();
+    window.clearTimeout(robotFactTimer);
+    window.clearTimeout(robotArrivalTimer);
+    window.clearTimeout(robotEyesTimer);
+    window.clearTimeout(robotMouthTimer);
+    window.clearTimeout(robotDizzyTimer);
+    window.clearTimeout(robotShakeTimer);
+    robotReturnTimer = null;
+    robotCleanupTimer = null;
+    robotFactTimer = null;
+    robotArrivalTimer = null;
+    robotEyesTimer = null;
+    robotMouthTimer = null;
+    robotDizzyTimer = null;
+    robotShakeTimer = null;
+    robot.classList.remove("is-dragging", "is-eyes-closed", "is-mouth-changed", "is-dizzy", "is-head-shaking");
+    if (!keepDodge) robot.classList.remove("is-dodging");
+    robotDestinationReached = false;
+    robotIsReturning = false;
     robot.style.setProperty("--dodge-x", `${x}px`);
     robot.style.setProperty("--dodge-y", `${y}px`);
+    robotFactBubble.hidden = true;
+    return [x, y];
   }
 
   function scheduleRobotReturn(delay = 5000) {
@@ -789,10 +814,6 @@
     if (!robot.classList.contains("is-dodging") || robotIsReturning || robotDestinationReached) return;
 
     robotDestinationReached = true;
-    robotEyesTimer = window.setTimeout(() => {
-      robot.classList.remove("is-eyes-closed");
-      robotEyesTimer = null;
-    }, 100);
     robotMouthTimer = window.setTimeout(() => {
       robot.classList.remove("is-mouth-changed");
       robotMouthTimer = null;
@@ -867,18 +888,13 @@
 
   function dodgeRobot() {
     playRobotOuch().catch(error => console.warn("Could not play the robot sound.", error));
-    window.clearTimeout(robotArrivalTimer);
-    window.clearTimeout(robotEyesTimer);
-    window.clearTimeout(robotMouthTimer);
-    robotDestinationReached = false;
-    robotIsReturning = false;
+    const [currentX, currentY] = cancelRobotAnimations();
     robot.classList.add("is-eyes-closed");
+    robotEyesTimer = window.setTimeout(() => {
+      robot.classList.remove("is-eyes-closed");
+      robotEyesTimer = null;
+    }, ROBOT_EYE_SPIN_DURATION);
     robot.classList.add("is-mouth-changed");
-    window.clearTimeout(robotReturnTimer);
-    window.clearTimeout(robotCleanupTimer);
-    const [currentX, currentY] = getRobotTranslate();
-    robot.style.setProperty("--dodge-x", `${currentX}px`);
-    robot.style.setProperty("--dodge-y", `${currentY}px`);
     robot.classList.add("is-dodging");
     void robot.offsetWidth;
     const bounds = robot.getBoundingClientRect();
@@ -904,6 +920,76 @@
     robot.style.setProperty("--dodge-x", `${currentX + translateX}px`);
     robot.style.setProperty("--dodge-y", `${currentY + translateY}px`);
     robotArrivalTimer = window.setTimeout(finishRobotArrival, 700);
+    scheduleRobotReturn();
+  }
+
+  function beginRobotDrag(event) {
+    const [originX, originY] = cancelRobotAnimations();
+    robotDestinationReached = true;
+    robot.classList.add("is-dragging", "is-dizzy", "is-mouth-changed");
+    robot.style.setProperty("--dodge-x", `${originX}px`);
+    robot.style.setProperty("--dodge-y", `${originY}px`);
+    robot.setPointerCapture(event.pointerId);
+    void robot.offsetWidth;
+
+    const transform = new DOMMatrixReadOnly(getComputedStyle(robot).transform);
+    robotDrag.moved = true;
+    robotDrag.originX = originX;
+    robotDrag.originY = originY;
+    robotDrag.transform = transform;
+    robotDrag.bounds = robot.getBoundingClientRect();
+  }
+
+  function moveRobotDrag(event) {
+    if (!robotDrag) return;
+    if (!robotDrag.moved) {
+      if (Math.hypot(event.clientX - robotDrag.startX, event.clientY - robotDrag.startY) < 4) return;
+      beginRobotDrag(event);
+    }
+
+    event.preventDefault();
+    const { transform, bounds } = robotDrag;
+    const determinant = transform.a * transform.d - transform.b * transform.c;
+    let deltaX = event.clientX - robotDrag.pointerX;
+    let deltaY = event.clientY - robotDrag.pointerY;
+    deltaX = Math.max(20 - bounds.left, Math.min(window.innerWidth - 20 - bounds.right, deltaX));
+    deltaY = Math.max(20 - bounds.top, Math.min(window.innerHeight - 20 - bounds.bottom, deltaY));
+    const translateX = (deltaX * transform.d - deltaY * transform.c) / determinant;
+    const translateY = (deltaY * transform.a - deltaX * transform.b) / determinant;
+    robotDrag.originX += translateX;
+    robotDrag.originY += translateY;
+    robot.style.setProperty("--dodge-x", `${robotDrag.originX}px`);
+    robot.style.setProperty("--dodge-y", `${robotDrag.originY}px`);
+    robotDrag.bounds = robot.getBoundingClientRect();
+    robotDrag.pointerX = event.clientX;
+    robotDrag.pointerY = event.clientY;
+  }
+
+  function finishRobotDrag() {
+    if (!robotDrag) return;
+    const wasDragged = robotDrag.moved;
+    robotDrag = null;
+    if (!wasDragged) return;
+
+    robot.classList.remove("is-dragging");
+    robot.classList.add("is-dodging");
+    robot.classList.add("is-mouth-changed");
+    robotClickSuppressed = true;
+    window.clearTimeout(robotClickSuppressionTimer);
+    robotClickSuppressionTimer = window.setTimeout(() => {
+      robotClickSuppressed = false;
+      robotClickSuppressionTimer = null;
+    }, 0);
+    robotDizzyTimer = window.setTimeout(() => {
+      robot.classList.remove("is-dizzy");
+      robot.classList.remove("is-mouth-changed");
+      robot.classList.add("is-head-shaking");
+      robotShakeTimer = window.setTimeout(() => {
+        robot.classList.remove("is-head-shaking");
+        robotShakeTimer = null;
+      }, ROBOT_HEAD_SHAKE_DURATION);
+      robotDizzyTimer = null;
+    }, ROBOT_EYE_SPIN_DURATION);
     scheduleRobotReturn();
   }
 
@@ -957,6 +1043,31 @@
   document.querySelector("#start-button").addEventListener("click", () => startGame());
   document.querySelector("#robot-face").addEventListener("click", sharePrimeFact);
   document.querySelector("#robot-body").addEventListener("click", dodgeRobot);
+  robot.addEventListener("pointerdown", event => {
+    if (!event.isPrimary || event.button !== 0) return;
+    robotDrag = {
+      startX: event.clientX,
+      startY: event.clientY,
+      pointerX: event.clientX,
+      pointerY: event.clientY,
+      originX: 0,
+      originY: 0,
+      moved: false,
+      transform: null,
+      bounds: null
+    };
+  });
+  window.addEventListener("pointermove", moveRobotDrag);
+  window.addEventListener("pointerup", finishRobotDrag);
+  window.addEventListener("pointercancel", finishRobotDrag);
+  robot.addEventListener("click", event => {
+    if (!robotClickSuppressed) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    robotClickSuppressed = false;
+    window.clearTimeout(robotClickSuppressionTimer);
+    robotClickSuppressionTimer = null;
+  }, true);
   robot.addEventListener("transitionend", event => {
     if (event.target === robot && event.propertyName === "translate") {
       finishRobotArrival();
