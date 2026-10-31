@@ -10,6 +10,8 @@
   };
   const MAX_LIFE_UNITS = 10;
   const HINTS_PER_GAME = 3;
+  const ROBOT_EYE_SPIN_DURATION = 1000;
+  const ROBOT_HEAD_SHAKE_DURATION = 1000;
   const PRIME_FACTS = [
     "2 is the only even prime. Every other even number can be divided by 2!",
     "1 is not prime: a prime number must have exactly two positive divisors.",
@@ -118,6 +120,17 @@
   let robotReturnTimer = null;
   let robotCleanupTimer = null;
   let robotFactTimer = null;
+  let robotArrivalTimer = null;
+  let robotEyesTimer = null;
+  let robotMouthTimer = null;
+  let robotDizzyTimer = null;
+  let robotShakeTimer = null;
+  let robotClickSuppressionTimer = null;
+  let robotDrag = null;
+  let robotClickSuppressed = false;
+  let robotDestinationReached = false;
+  let robotIsReturning = false;
+  let robotAudioContext = null;
   let lastPrimeFactIndex = -1;
   let renderedGrid = null;
 
@@ -681,7 +694,8 @@
   }
 
   function sharePrimeFact() {
-    holdRobotPosition();
+    playRobotDing().catch(error => console.warn("Could not play the robot sound.", error));
+    cancelRobotAnimations(true);
     let factIndex = randomInteger(0, PRIME_FACTS.length - 1);
     if (factIndex === lastPrimeFactIndex) {
       factIndex = (factIndex + 1) % PRIME_FACTS.length;
@@ -729,8 +743,8 @@
     robotFactTimer = window.setTimeout(() => {
       robotFactBubble.hidden = true;
       robotFactTimer = null;
-      scheduleRobotReturn(3000);
-    }, 5000);
+      scheduleRobotReturn(2000);
+    }, 8000);
   }
 
   function getRobotTranslate() {
@@ -740,14 +754,32 @@
     return [0, 1].map(index => Number.parseFloat(values[index]) || 0);
   }
 
-  function holdRobotPosition() {
+  function cancelRobotAnimations(keepDodge = false) {
+    const [x, y] = getRobotTranslate();
     window.clearTimeout(robotReturnTimer);
     window.clearTimeout(robotCleanupTimer);
-    if (!robot.classList.contains("is-dodging")) return;
-
-    const [x, y] = getRobotTranslate();
+    window.clearTimeout(robotFactTimer);
+    window.clearTimeout(robotArrivalTimer);
+    window.clearTimeout(robotEyesTimer);
+    window.clearTimeout(robotMouthTimer);
+    window.clearTimeout(robotDizzyTimer);
+    window.clearTimeout(robotShakeTimer);
+    robotReturnTimer = null;
+    robotCleanupTimer = null;
+    robotFactTimer = null;
+    robotArrivalTimer = null;
+    robotEyesTimer = null;
+    robotMouthTimer = null;
+    robotDizzyTimer = null;
+    robotShakeTimer = null;
+    robot.classList.remove("is-dragging", "is-eyes-closed", "is-mouth-changed", "is-dizzy", "is-head-shaking");
+    if (!keepDodge) robot.classList.remove("is-dodging");
+    robotDestinationReached = false;
+    robotIsReturning = false;
     robot.style.setProperty("--dodge-x", `${x}px`);
     robot.style.setProperty("--dodge-y", `${y}px`);
+    robotFactBubble.hidden = true;
+    return [x, y];
   }
 
   function scheduleRobotReturn(delay = 5000) {
@@ -755,6 +787,16 @@
     window.clearTimeout(robotCleanupTimer);
     if (!robot.classList.contains("is-dodging")) return;
     robotReturnTimer = window.setTimeout(() => {
+      window.clearTimeout(robotArrivalTimer);
+      robotArrivalTimer = null;
+      robotDestinationReached = false;
+      window.clearTimeout(robotEyesTimer);
+      robotEyesTimer = null;
+      robot.classList.remove("is-eyes-closed");
+      window.clearTimeout(robotMouthTimer);
+      robotMouthTimer = null;
+      robot.classList.remove("is-mouth-changed");
+      robotIsReturning = true;
       robot.style.setProperty("--dodge-x", "0px");
       robot.style.setProperty("--dodge-y", "0px");
       robotCleanupTimer = window.setTimeout(() => {
@@ -766,12 +808,93 @@
     }, delay);
   }
 
+  function finishRobotArrival() {
+    window.clearTimeout(robotArrivalTimer);
+    robotArrivalTimer = null;
+    if (!robot.classList.contains("is-dodging") || robotIsReturning || robotDestinationReached) return;
+
+    robotDestinationReached = true;
+    robotMouthTimer = window.setTimeout(() => {
+      robot.classList.remove("is-mouth-changed");
+      robotMouthTimer = null;
+    }, 1);
+  }
+
+  async function playRobotOuch() {
+    const AudioContextConstructor = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextConstructor) return;
+    if (!robotAudioContext) robotAudioContext = new AudioContextConstructor();
+    if (robotAudioContext.state === "suspended") await robotAudioContext.resume();
+
+    const now = robotAudioContext.currentTime;
+    const duration = 0.15;
+    const cutoff = duration - 0.015;
+    const sound = robotAudioContext.createGain();
+    sound.gain.setValueAtTime(0.0001, now);
+    sound.gain.exponentialRampToValueAtTime(0.3, now + 0.035);
+    sound.gain.setTargetAtTime(0.17, now + 0.11, 0.07);
+    sound.gain.setValueAtTime(0.17, now + cutoff);
+    sound.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+    sound.connect(robotAudioContext.destination);
+
+    const voice = robotAudioContext.createOscillator();
+    voice.type = "sawtooth";
+    voice.frequency.setValueAtTime(680, now);
+    voice.frequency.exponentialRampToValueAtTime(980, now + 0.12);
+    voice.frequency.exponentialRampToValueAtTime(800, now + cutoff);
+
+    [[780, 430, 0.65], [1350, 2150, 0.3]].forEach(([start, end, volume]) => {
+      const formant = robotAudioContext.createBiquadFilter();
+      formant.type = "bandpass";
+      formant.frequency.setValueAtTime(start, now);
+      formant.frequency.exponentialRampToValueAtTime(end, now + duration);
+      formant.Q.value = 4;
+      const formantGain = robotAudioContext.createGain();
+      formantGain.gain.value = volume;
+      voice.connect(formant);
+      formant.connect(formantGain);
+      formantGain.connect(sound);
+    });
+    voice.start(now);
+    voice.stop(now + duration + 0.02);
+  }
+
+  async function playRobotDing() {
+    const AudioContextConstructor = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextConstructor) return;
+    if (!robotAudioContext) robotAudioContext = new AudioContextConstructor();
+    if (robotAudioContext.state === "suspended") await robotAudioContext.resume();
+
+    const now = robotAudioContext.currentTime;
+    const duration = 0.40;
+    const sound = robotAudioContext.createGain();
+    sound.gain.setValueAtTime(0.0001, now);
+    sound.gain.exponentialRampToValueAtTime(0.3, now + 0.008);
+    sound.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+    sound.connect(robotAudioContext.destination);
+
+    [880, 1760].forEach((frequency, index) => {
+      const voice = robotAudioContext.createOscillator();
+      const partial = robotAudioContext.createGain();
+      voice.type = "sine";
+      voice.frequency.setValueAtTime(frequency, now);
+      partial.gain.value = index === 0 ? 1 : 0.28;
+      voice.connect(partial);
+      partial.connect(sound);
+      voice.start(now);
+      voice.stop(now + duration + 0.02);
+    });
+  }
+
   function dodgeRobot() {
-    window.clearTimeout(robotReturnTimer);
-    window.clearTimeout(robotCleanupTimer);
-    const [currentX, currentY] = getRobotTranslate();
-    robot.style.setProperty("--dodge-x", `${currentX}px`);
-    robot.style.setProperty("--dodge-y", `${currentY}px`);
+    playRobotOuch().catch(error => console.warn("Could not play the robot sound.", error));
+    const [currentX, currentY] = cancelRobotAnimations();
+    robot.classList.add("is-eyes-closed");
+    robotEyesTimer = window.setTimeout(() => {
+      robot.classList.remove("is-eyes-closed");
+      robotEyesTimer = null;
+    }, ROBOT_EYE_SPIN_DURATION);
+    robot.classList.add("is-mouth-changed");
     robot.classList.add("is-dodging");
     void robot.offsetWidth;
     const bounds = robot.getBoundingClientRect();
@@ -796,6 +919,77 @@
     const translateY = (deltaY * transform.a - deltaX * transform.b) / determinant;
     robot.style.setProperty("--dodge-x", `${currentX + translateX}px`);
     robot.style.setProperty("--dodge-y", `${currentY + translateY}px`);
+    robotArrivalTimer = window.setTimeout(finishRobotArrival, 700);
+    scheduleRobotReturn();
+  }
+
+  function beginRobotDrag(event) {
+    const [originX, originY] = cancelRobotAnimations();
+    robotDestinationReached = true;
+    robot.classList.add("is-dragging", "is-dizzy", "is-mouth-changed");
+    robot.style.setProperty("--dodge-x", `${originX}px`);
+    robot.style.setProperty("--dodge-y", `${originY}px`);
+    robot.setPointerCapture(event.pointerId);
+    void robot.offsetWidth;
+
+    const transform = new DOMMatrixReadOnly(getComputedStyle(robot).transform);
+    robotDrag.moved = true;
+    robotDrag.originX = originX;
+    robotDrag.originY = originY;
+    robotDrag.transform = transform;
+    robotDrag.bounds = robot.getBoundingClientRect();
+  }
+
+  function moveRobotDrag(event) {
+    if (!robotDrag) return;
+    if (!robotDrag.moved) {
+      if (Math.hypot(event.clientX - robotDrag.startX, event.clientY - robotDrag.startY) < 4) return;
+      beginRobotDrag(event);
+    }
+
+    event.preventDefault();
+    const { transform, bounds } = robotDrag;
+    const determinant = transform.a * transform.d - transform.b * transform.c;
+    let deltaX = event.clientX - robotDrag.pointerX;
+    let deltaY = event.clientY - robotDrag.pointerY;
+    deltaX = Math.max(20 - bounds.left, Math.min(window.innerWidth - 20 - bounds.right, deltaX));
+    deltaY = Math.max(20 - bounds.top, Math.min(window.innerHeight - 20 - bounds.bottom, deltaY));
+    const translateX = (deltaX * transform.d - deltaY * transform.c) / determinant;
+    const translateY = (deltaY * transform.a - deltaX * transform.b) / determinant;
+    robotDrag.originX += translateX;
+    robotDrag.originY += translateY;
+    robot.style.setProperty("--dodge-x", `${robotDrag.originX}px`);
+    robot.style.setProperty("--dodge-y", `${robotDrag.originY}px`);
+    robotDrag.bounds = robot.getBoundingClientRect();
+    robotDrag.pointerX = event.clientX;
+    robotDrag.pointerY = event.clientY;
+  }
+
+  function finishRobotDrag() {
+    if (!robotDrag) return;
+    const wasDragged = robotDrag.moved;
+    robotDrag = null;
+    if (!wasDragged) return;
+
+    robot.classList.remove("is-dragging");
+    robot.classList.add("is-dodging");
+    robot.classList.add("is-mouth-changed");
+    robotClickSuppressed = true;
+    window.clearTimeout(robotClickSuppressionTimer);
+    robotClickSuppressionTimer = window.setTimeout(() => {
+      robotClickSuppressed = false;
+      robotClickSuppressionTimer = null;
+    }, 0);
+    robotDizzyTimer = window.setTimeout(() => {
+      robot.classList.remove("is-dizzy");
+      robot.classList.remove("is-mouth-changed");
+      robot.classList.add("is-head-shaking");
+      robotShakeTimer = window.setTimeout(() => {
+        robot.classList.remove("is-head-shaking");
+        robotShakeTimer = null;
+      }, ROBOT_HEAD_SHAKE_DURATION);
+      robotDizzyTimer = null;
+    }, ROBOT_EYE_SPIN_DURATION);
     scheduleRobotReturn();
   }
 
@@ -849,6 +1043,36 @@
   document.querySelector("#start-button").addEventListener("click", () => startGame());
   document.querySelector("#robot-face").addEventListener("click", sharePrimeFact);
   document.querySelector("#robot-body").addEventListener("click", dodgeRobot);
+  robot.addEventListener("pointerdown", event => {
+    if (!event.isPrimary || event.button !== 0) return;
+    robotDrag = {
+      startX: event.clientX,
+      startY: event.clientY,
+      pointerX: event.clientX,
+      pointerY: event.clientY,
+      originX: 0,
+      originY: 0,
+      moved: false,
+      transform: null,
+      bounds: null
+    };
+  });
+  window.addEventListener("pointermove", moveRobotDrag);
+  window.addEventListener("pointerup", finishRobotDrag);
+  window.addEventListener("pointercancel", finishRobotDrag);
+  robot.addEventListener("click", event => {
+    if (!robotClickSuppressed) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    robotClickSuppressed = false;
+    window.clearTimeout(robotClickSuppressionTimer);
+    robotClickSuppressionTimer = null;
+  }, true);
+  robot.addEventListener("transitionend", event => {
+    if (event.target === robot && event.propertyName === "translate") {
+      finishRobotArrival();
+    }
+  });
   document.querySelector("#restart-button").addEventListener("click", () => startGame(state.lastSettings.mode, state.lastSettings.difficulty));
   document.querySelector("#new-game-button").addEventListener("click", () => {
     stopTimer();
