@@ -73,6 +73,7 @@
   const PAM_RESCUE_ATTACH_OFFSET = 96;
   const PAM_RESCUE_PEN_OFFSET = 130;
   const PAM_RESCUE_SHAKE_WAIT_FALLBACK = 9000;
+  const PAM_RESCUE_PEN_GRAB_DISTANCE = 150;
   const PAM_RESCUE_SAFETY_TIMEOUT = 30000;
   const PEN_PAM_DRAG_LINES = [
     "Seriously?! You're dragging Pam around again?",
@@ -90,6 +91,11 @@
     "Both of you, get back here!"
   ];
   const PEN_RESCUE_RELIEF_LINE = "Finally! Now get her home, Dan!";
+  const PEN_TAKE_PAM_LINES = [
+    "That's enough! Give her back!",
+    "Hands off! I'll take her from here!",
+    "Let go of her, right now!"
+  ];
   const DAN_RESCUE_DONE_LINE = "There! You're safe now, Pam.";
   const PAM_RESCUE_DONE_LINE = "That was dizzying! Thank you, Dan!";
   const DAN_DRAG_LINES = [
@@ -445,6 +451,9 @@
     phase: "idle", // idle | holding | waiting | escorting | returning
     session: 0,
     escalated: false,
+    forced: false,
+    penDisplaced: false,
+    pointerId: null,
     side: 1,
     attached: false,
     frame: null,
@@ -2453,7 +2462,7 @@ let bubbleFollowFrame = null;
     return symbol;
   }
 
-  function startPamRescue(pam) {
+  function startPamRescue(pam, pointerId) {
     const dan = document.querySelector(".robot-blue");
     const pen = document.querySelector(".robot-mint");
     const danState = robotStates.get(dan);
@@ -2492,6 +2501,8 @@ let bubbleFollowFrame = null;
     pamRescue.session += 1;
     pamRescue.phase = "holding";
     pamRescue.escalated = false;
+    pamRescue.forced = false;
+    pamRescue.pointerId = pointerId;
     pamRescue.attached = false;
     pamRescue.danVelocity = { x: 0, y: 0 };
     pamRescue.pamMotion = { x: 0, y: 0 };
@@ -2504,6 +2515,7 @@ let bubbleFollowFrame = null;
     pamRescue.escalationStart = pamRescue.frameTime;
 
     // Pen reacts exactly once per drag session.
+    pen.classList.remove("is-pen-pam-pursuit");
     pen.classList.add("is-pen-annoyed");
     pen.querySelectorAll(".pen-chase-symbol").forEach(symbol => symbol.remove());
     addPenSymbol(pen);
@@ -2526,6 +2538,7 @@ let bubbleFollowFrame = null;
     if (pamRescue.phase !== "holding" || pamRescue.escalated) return;
     const pen = document.querySelector(".robot-mint");
     pamRescue.escalated = true;
+    pamRescue.penDisplaced = true; // Pen has left home, so he must be sent back at the end
     pamRescue.escalationStart = performance.now();
     pamRescue.penVelocity = { x: 0, y: 0 };
     cancelRobotAnimations(pen);
@@ -2574,7 +2587,8 @@ let bubbleFollowFrame = null;
     pamRescue.prevPamX = pamCenter.x;
     pamRescue.prevPamY = pamCenter.y;
     const noMotion = { x: 0, y: 0 };
-    const penFollows = pamRescue.escalated;
+    const penFollows = pamRescue.escalated ||
+      (pamRescue.penDisplaced && (pamRescue.phase === "escorting" || pamRescue.phase === "returning"));
     const lookAtPam = () => {
       const penCenter = getRobotCenter(pen);
       pen.style.setProperty("--pen-look-x", `${Math.max(-1, Math.min(1, (pamCenter.x - penCenter.x) / 150)) * 3}px`);
@@ -2593,6 +2607,13 @@ let bubbleFollowFrame = null;
         steerRobot(pen, pamRescue.penVelocity, penSlot, holding ? pamRescue.pamMotion : noMotion,
           dt, maxSpeed, 4800, 6);
         lookAtPam();
+        // Pen has caught up with Pam: he forcibly ends the user's grip.
+        if (holding && !pamRescue.forced) {
+          const penCenter = getRobotCenter(pen);
+          if (Math.hypot(pamCenter.x - penCenter.x, pamCenter.y - penCenter.y) <= PAM_RESCUE_PEN_GRAB_DISTANCE) {
+            penTakePamFromUser(pam);
+          }
+        }
       }
     } else if (pamRescue.phase === "escorting") {
       const [pamTx, pamTy] = getRobotTranslate(pam);
@@ -2641,6 +2662,30 @@ let bubbleFollowFrame = null;
     }
   }
 
+  // Pen reaches Pam during the escalation and forcibly ends the user's grip, even though the
+  // button / finger may still be down. This goes through the normal release path, so Pam gets her
+  // usual dizzy + head-shake sequence and Dan waits for it before the escort begins.
+  function penTakePamFromUser(pam) {
+    if (pamRescue.phase !== "holding" || !pamRescue.escalated || pamRescue.forced) return; // once only
+    if (!robotDrag || robotDrag.robot !== pam) return;
+    pamRescue.forced = true;
+    const pointerId = pamRescue.pointerId;
+    finishRobotDrag(); // ends the drag record, so no further pointer movement can move Pam
+    try {
+      if (pointerId !== null && pam.hasPointerCapture(pointerId)) pam.releasePointerCapture(pointerId);
+    } catch (error) {
+      console.warn("Could not release Pam's pointer capture.", error);
+    }
+    // The user is probably still holding: swallow the click their eventual release would cause on Pam.
+    const swallowClick = () => {
+      window.removeEventListener("pointerup", swallowClick, true);
+      window.removeEventListener("pointercancel", swallowClick, true);
+      suppressNextRobotClick(pam);
+    };
+    window.addEventListener("pointerup", swallowClick, true);
+    window.addEventListener("pointercancel", swallowClick, true);
+  }
+
   // The user let go of Pam. Dan stops holding and waits for Pam's head-shake to finish.
   function handlePamReleasedDuringRescue(pam) {
     const dan = document.querySelector(".robot-blue");
@@ -2651,10 +2696,15 @@ let bubbleFollowFrame = null;
     clearPamRescueSpeechTimers();
     dan.classList.remove("is-dan-rescuing");
     dan.style.setProperty("--dan-lean", "0deg");
-    const penJoined = pamRescue.escalated;
-    pen.classList.remove("is-pen-annoyed", "is-pen-pam-pursuit");
-    pen.querySelectorAll(".pen-chase-symbol").forEach(symbol => symbol.remove());
-    if (penJoined) showRobotSpeech(pen, PEN_RESCUE_RELIEF_LINE, 2500);
+    if (pamRescue.forced) {
+      // Pen snatched Pam: he keeps his furious look until everyone is home.
+      showRobotSpeech(pen, pickRandomLine(PEN_TAKE_PAM_LINES), 2500);
+    } else {
+      const penJoined = pamRescue.escalated;
+      pen.classList.remove("is-pen-annoyed", "is-pen-pam-pursuit");
+      pen.querySelectorAll(".pen-chase-symbol").forEach(symbol => symbol.remove());
+      if (penJoined) showRobotSpeech(pen, PEN_RESCUE_RELIEF_LINE, 2500);
+    }
     // Pam's existing head-shake chain signals completion through this hook.
     robotStates.get(pam).onHeadShakeComplete = beginPamEscort;
     pamRescueLater(() => {
@@ -2691,8 +2741,8 @@ let bubbleFollowFrame = null;
     pamRescue.frame = null;
     clearPamRescueTimers();
     robotStates.get(pam).onHeadShakeComplete = null;
-    const wasEscalated = pamRescue.escalated;
-    [pam, dan, ...(wasEscalated ? [pen] : [])].forEach(robot => {
+    const penWasDisplaced = pamRescue.penDisplaced;
+    [pam, dan, ...(penWasDisplaced ? [pen] : [])].forEach(robot => {
       robot.style.setProperty("--dodge-x", "0px");
       robot.style.setProperty("--dodge-y", "0px");
     });
@@ -2712,6 +2762,9 @@ let bubbleFollowFrame = null;
     });
     pamRescue.phase = "idle";
     pamRescue.escalated = false;
+    pamRescue.forced = false;
+    pamRescue.penDisplaced = false;
+    pamRescue.pointerId = null;
     pamRescue.attached = false;
     pamRescue.prevPamX = null;
     pamRescue.prevPamY = null;
@@ -2732,7 +2785,7 @@ let bubbleFollowFrame = null;
       robot.classList.add("is-dizzy");
       setPamHeadBop(robot, true, true);
       startPamDizzySound(robot).catch(error => console.warn("Could not play Pam's dizzy sound.", error));
-      startPamRescue(robot);
+      startPamRescue(robot, event.pointerId);
     } else if (isPen) {
       if (!robot.classList.contains("is-permanently-angry")) {
         robot.classList.add("is-pen-dragging-expression");

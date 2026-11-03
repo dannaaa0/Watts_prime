@@ -77,6 +77,6 @@ are handled in `prime.js`.
 
 - When the user drags Pam, Pen (once per drag) complains and tells Dan to fetch her. Dan rushes over and hangs onto Pam, following her live position. She never takes Pam out of the user's grip.
 - Release within 5 seconds: Dan stops holding and waits for Pam's head-shake to finish, then escorts her to her original position, then returns to her own.
-- Hold for more than 5 seconds: Pen becomes furious (separate from his rage system) and walks over to hover beside Pam and Dan, tracking them live. The user stays in control. On release, the same wait-then-escort sequence plays and Pen goes home with them.
+- Hold for more than 5 seconds: Pen becomes furious (separate from his rage system) and walks toward Pam and Dan, tracking them live. The user keeps control until Pen reaches Pam; then Pen forcibly ends the grip (even if the button or finger is still down), Pam does her usual dizzy and head-shake, and Dan and Pen escort her home. If the user lets go first, the same wait-then-escort sequence plays.
 - Pam's drag is unchanged, and the sequence is skipped if Pen or Dan are busy with another mechanic (rage, calming, cursor avoidance, Dan being dragged).
 
