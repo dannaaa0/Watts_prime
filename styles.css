@@ -742,3 +742,17 @@ h1 span { color: var(--pink); }
 .robot.robot-blue.is-dan-rescuing:not(.is-cursor-running) .robot-face .robot-mouth { bottom: 7px; left: 28px; box-sizing: border-box; width: 13px; height: 10px; border: 2px solid #e790ae; border-radius: 50%; background: none; transform: none; transition: none; }
 @keyframes pen-seethe { from { transform: translateX(-1px) rotate(-1.2deg); } to { transform: translateX(1px) rotate(1.2deg); } }
 @keyframes dan-strain { from { transform: rotate(-3deg); } to { transform: rotate(3deg); } }
+
+/* ===== Dan glances back at Pam after she hides behind her =====
+   Only the head group turns (it pivots at the neck); the body, neck and cursor-avoidance motion are untouched.
+   --dan-check-dir is -1 when Pam is on Dan's left, +1 on her right. */
+.robot-blue.is-dan-checking-pam .robot-head-wrap { animation: dan-check-head 1.55s ease-in-out both; }
+.robot-blue.is-dan-checking-pam .robot-face { animation: dan-check-face 1.55s ease-in-out both; }
+@keyframes dan-check-head {
+  0%, 100% { transform: none; }
+  22.58%, 77.42% { transform: rotateY(calc(var(--dan-check-dir, -1) * 38deg)) rotate(calc(var(--dan-check-dir, -1) * 5deg)); }
+}
+@keyframes dan-check-face {
+  0%, 100% { translate: 0 0; }
+  22.58%, 77.42% { translate: calc(var(--dan-check-dir, -1) * 8px) 0; }
+}

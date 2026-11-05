@@ -71,7 +71,7 @@ are handled in `prime.js`.
 - Dan can be dragged (mouse, touch or pen). She gets a mischievous face, a wiggle and a taunt. Dragging is disabled while Pen is raging, because clicking Dan then activates her calming pursuit.
 - Pen turns annoyed (angry brows, frown, a 💢) and chases Dan's actual position, accelerating the longer the chase lasts. This is separate from the 10-click rage: no `.is-raging`, no `.is-permanently-angry`, no red styling, no cursor pursuit.
 - If Pen gets within reach while the user is still holding Dan, the drag is ended forcibly, Pen escorts Dan back to her home position, then walks to his own home and both return to normal.
-- If the user lets go first, Pen stops at once, gloats, and walks home. Dan stays where she was dropped.
+- If the user lets go first, Pen stops at once, gloats, and walks home. Dan stays where she was dropped for 5 seconds, then returns to her original position (grabbing her again cancels the return).
 
 ## Pam drag rescue
 
@@ -79,4 +79,10 @@ are handled in `prime.js`.
 - Release within 5 seconds: Dan stops holding and waits for Pam's head-shake to finish, then escorts her to her original position, then returns to her own.
 - Hold for more than 5 seconds: Pen becomes furious (separate from his rage system) and walks toward Pam and Dan, tracking them live. The user keeps control until Pen reaches Pam; then Pen forcibly ends the grip (even if the button or finger is still down), Pam does her usual dizzy and head-shake, and Dan and Pen escort her home. If the user lets go first, the same wait-then-escort sequence plays.
 - Pam's drag is unchanged, and the sequence is skipped if Pen or Dan are busy with another mechanic (rage, calming, cursor avoidance, Dan being dragged).
+
+## Dan protects Pam while she hides
+
+- Once Pam has actually arrived and entered her hidden stage behind Dan, Dan glances back over her shoulder (head only, about 1.5s: turn, hold, turn forward), then says exactly one random line from a pool of 10, never the same line twice in a row.
+- The line appears right after the glance and takes over the shared bubble, replacing Pen's antenna warning if it is still showing.
+- The glance is cancelled cleanly if the hide is released or Dan is grabbed, and it does not touch Dan's movement or cursor avoidance.
 

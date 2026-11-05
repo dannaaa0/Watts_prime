@@ -68,7 +68,25 @@
   const PEN_HOMING_SPEED = 520;
   const DAN_ESCORT_OFFSET = 126;
   const DAN_CHASE_SAFETY_TIMEOUT = 14000;
+  const DAN_DROPPED_RETURN_DELAY = 5000;
   // Pam drag -> Dan rescue -> Pen escalation
+  // Dan's protective glance when Pam finishes hiding behind her
+  const DAN_CHECK_TURN_MS = 350;
+  const DAN_CHECK_HOLD_MS = 850;
+  const DAN_CHECK_TOTAL_MS = DAN_CHECK_TURN_MS * 2 + DAN_CHECK_HOLD_MS;
+  const DAN_PROTECT_SPEECH_MS = 4000;
+  const DAN_PROTECT_LINES = [
+    "Oh? Pam? Hiding behind me again?",
+    "It's alright, Pam. I'll keep you safe.",
+    "I see... Someone's been playing with her antenna again.",
+    "Could you please stop startling her? She's had enough.",
+    "Don't worry, Pam. They can't reach you from here.",
+    "She's a little shy right now. Please give her some space.",
+    "Oh dear. You're really not letting go of my back, are you?",
+    "I think you've frightened her. Let's give her a moment.",
+    "You can stay here as long as you need, Pam.",
+    "I'm afraid I'm going to have to ask you to keep your cursor away from her antenna."
+  ];
   const PAM_RESCUE_ESCALATION_MS = 5000;
   const PAM_RESCUE_ATTACH_OFFSET = 96;
   const PAM_RESCUE_PEN_OFFSET = 130;
@@ -447,6 +465,7 @@
     prevDanX: null,
     prevDanY: null
   };
+  const danProtect = { timer: null, lastIndex: -1, session: 0 };
   const pamRescue = {
     phase: "idle", // idle | holding | waiting | escorting | returning
     session: 0,
@@ -1289,6 +1308,56 @@ let bubbleFollowFrame = null;
       }
     }, PAM_HIDDEN_MOUTH_FLAT_DELAY);
     pamState.hideTimer = window.setTimeout(() => revealPamFromHiding(pam, target), PAM_HIDE_DURATION);
+    startDanProtectiveReaction(pam, target);
+  }
+
+  // Dan glances back at Pam, turns forward again, then says one random line.
+  // Only called once Pam has actually arrived and entered her hidden stage.
+  function startDanProtectiveReaction(pam, dan) {
+    if (!dan.classList.contains("robot-blue")) return;
+    cancelDanProtectiveReaction(dan); // never let two sequences overlap
+    const session = ++danProtect.session;
+    const busy = dan.classList.contains("is-dragging") ||
+      dan.classList.contains("is-dan-mischievous") ||
+      dan.classList.contains("is-dan-rescuing") ||
+      dan.classList.contains("is-dan-chase-active") ||
+      dan.classList.contains("is-pam-rescue-active");
+    let delay = 0;
+    if (!busy) {
+      const direction = getRobotCenter(pam).x < getRobotCenter(dan).x ? -1 : 1;
+      dan.style.setProperty("--dan-check-dir", String(direction));
+      dan.classList.add("is-dan-checking-pam");
+      delay = DAN_CHECK_TOTAL_MS;
+    }
+    danProtect.timer = window.setTimeout(() => {
+      danProtect.timer = null;
+      if (session !== danProtect.session) return;
+      dan.classList.remove("is-dan-checking-pam");
+      dan.style.removeProperty("--dan-check-dir");
+      sayDanProtectiveLine(pam, dan, session);
+    }, delay);
+  }
+
+  // Shows exactly one line right after Dan has checked on Pam. It takes over the shared bubble
+  // (replacing any earlier message such as Pen's antenna warning); skipped if Pam is no longer hidden.
+  function sayDanProtectiveLine(pam, dan, session) {
+    if (session !== danProtect.session) return;
+    const pamState = robotStates.get(pam);
+    if (pamState.hiddenBehind !== dan || !pam.classList.contains("is-hidden-behind")) return;
+    let index;
+    do {
+      index = randomInteger(0, DAN_PROTECT_LINES.length - 1);
+    } while (index === danProtect.lastIndex && DAN_PROTECT_LINES.length > 1);
+    danProtect.lastIndex = index;
+    showRobotSpeech(dan, DAN_PROTECT_LINES[index], DAN_PROTECT_SPEECH_MS);
+  }
+
+  function cancelDanProtectiveReaction(dan = document.querySelector(".robot-blue")) {
+    window.clearTimeout(danProtect.timer);
+    danProtect.timer = null;
+    danProtect.session += 1; // invalidates any callback already queued
+    dan.classList.remove("is-dan-checking-pam");
+    dan.style.removeProperty("--dan-check-dir");
   }
 
   function followPamBehindTarget(pam, target, timestamp) {
@@ -1369,6 +1438,7 @@ let bubbleFollowFrame = null;
   }
 
   function releasePamFromHiding(pam) {
+    cancelDanProtectiveReaction();
     const pamState = robotStates.get(pam);
     window.clearTimeout(pamState.hideTimer);
     window.clearTimeout(pamState.antennaExpressionTimer);
@@ -2220,6 +2290,7 @@ let bubbleFollowFrame = null;
     const danState = robotStates.get(dan);
     const pen = document.querySelector(".robot-mint");
     const penState = robotStates.get(pen);
+    cancelDanProtectiveReaction(dan);
     window.clearTimeout(danState.eyebrowTimer);
     danState.eyebrowTimer = null;
     dan.classList.remove("is-eyebrow-raised", "is-mouth-flat", "is-mouth-changed", "is-dizzy", "is-dan-caught");
@@ -2359,6 +2430,10 @@ let bubbleFollowFrame = null;
     suppressNextRobotClick(dan);
     dan.classList.remove("is-dragging", "is-dan-mischievous", "is-dan-chase-active");
     if (danChase.phase !== "dragging") return;
+    // Dropped before Pen caught her: Dan stays where she was dropped for 5 seconds, then goes back to her
+    // original position (the same dodge-return Pam and Pen use). Grabbing her again cancels this return.
+    dan.classList.add("is-dodging");
+    scheduleRobotReturn(dan, DAN_DROPPED_RETURN_DELAY);
     if (!wasChasing) {
       resetDanChaseState();
       return;
@@ -2367,7 +2442,7 @@ let bubbleFollowFrame = null;
     clearDanChaseSpeechTimers(); // cancels Pen's pending annoyed line
     removePenChaseExpression(pen);
     resetDanChaseState();
-    // Dan stays exactly where she was dropped. Pen gloats, then walks home via the normal dodge return.
+    // Pen gloats, then walks home via the normal dodge return.
     pen.classList.add("is-dodging");
     showRobotSpeech(pen, pickRandomLine(PEN_SMUG_LINES), 3500);
     scheduleRobotReturn(pen, 3800);
